@@ -1,0 +1,25 @@
+
+# Maven
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Application secrets
+/src/main/resources/application.properties
+/src/main/resources/application-local.properties
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
