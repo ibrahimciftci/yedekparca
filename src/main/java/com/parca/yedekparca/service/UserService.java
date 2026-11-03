@@ -92,4 +92,16 @@ public class UserService {
                 .createdAt(user.getCreatedAt())
                 .build();
     }
+
+
+    public UserResponse getProfile(String email) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Kullanıcı bulunamadı."
+                ));
+
+        return mapToUserResponse(user);
+    }
+
 }
