@@ -9,8 +9,14 @@ import com.parca.yedekparca.entity.User;
 import com.parca.yedekparca.entity.UserRole;
 import com.parca.yedekparca.repository.UserRepository;
 import com.parca.yedekparca.dto.UserUpdateRequest;
+import com.parca.yedekparca.dto.AdminUserPageResponse;
+import com.parca.yedekparca.dto.AdminUserResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService {
@@ -120,6 +126,47 @@ public class UserService {
         User updatedUser = userRepository.save(user);
 
         return mapToUserResponse(updatedUser);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminUserPageResponse getAdminUsers(
+            String search, UserRole role, int page, int size) {
+        String normalizedSearch = search == null || search.isBlank()
+                ? null
+                : search.trim();
+        Page<User> users = userRepository.searchUsers(
+                normalizedSearch,
+                role,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        return AdminUserPageResponse.builder()
+                .content(users.getContent().stream().map(this::mapToAdminUserResponse).toList())
+                .page(users.getNumber())
+                .size(users.getSize())
+                .totalElements(users.getTotalElements())
+                .totalPages(users.getTotalPages())
+                .last(users.isLast())
+                .build();
+    }
+
+    @Transactional
+    public AdminUserResponse updateUserStatus(Long userId, boolean active) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Kullanıcı bulunamadı."));
+        user.setActive(active);
+        return mapToAdminUserResponse(userRepository.save(user));
+    }
+
+    private AdminUserResponse mapToAdminUserResponse(User user) {
+        return AdminUserResponse.builder()
+                .id(user.getId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .role(user.getRole().name())
+                .active(user.getActive())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 
 }

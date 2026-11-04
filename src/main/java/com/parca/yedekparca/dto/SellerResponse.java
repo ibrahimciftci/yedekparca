@@ -11,6 +11,9 @@ import java.time.LocalDateTime;
 public class SellerResponse {
 
     private Long id;
+    private String applicantFirstName;
+    private String applicantLastName;
+    private String applicantEmail;
     private String storeName;
     private String phone;
     private String city;

@@ -50,8 +50,14 @@ public class SecurityConfig {
                                 "/api/auth/login"
                         ).permitAll()
 
+                        // Ürün kataloğu herkese açıktır; katalog görünürlüğü servis sorgusunda kısıtlanır.
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
+
                         // Admin endpoint'lerine sadece ADMIN rolü erişebilir.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // Ürün yönetimi endpoint'leri satıcı rolü gerektirir.
+                        .requestMatchers("/api/seller/products/**").hasRole("SELLER")
 
                         // Diğer endpoint'ler giriş yapmış kullanıcılara açık.
                         .anyRequest().authenticated()

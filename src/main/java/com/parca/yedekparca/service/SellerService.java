@@ -54,6 +54,7 @@ public class SellerService {
         return mapToSellerResponse(savedSeller);
     }
 
+    @Transactional(readOnly = true)
     public SellerResponse getMyApplication(String email) {
 
         Seller seller = sellerRepository.findByUserId(
@@ -69,6 +70,7 @@ public class SellerService {
         return mapToSellerResponse(seller);
     }
 
+    @Transactional(readOnly = true)
     public List<SellerResponse> getPendingApplications() {
 
         return sellerRepository.findByStatus(SellerStatus.PENDING)
@@ -126,6 +128,9 @@ public class SellerService {
     private SellerResponse mapToSellerResponse(Seller seller) {
         return SellerResponse.builder()
                 .id(seller.getId())
+                .applicantFirstName(seller.getUser().getFirstName())
+                .applicantLastName(seller.getUser().getLastName())
+                .applicantEmail(seller.getUser().getEmail())
                 .storeName(seller.getStoreName())
                 .phone(seller.getPhone())
                 .city(seller.getCity())

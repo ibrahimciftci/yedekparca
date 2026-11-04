@@ -61,7 +61,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     userDetailsService.loadUserByUsername(email);
 
             // JWT geçerliyse kullanıcıyı SecurityContext'e ekle.
-            if (jwtService.isTokenValid(jwt, userDetails.getUsername())) {
+            if (userDetails.isEnabled()
+                    && jwtService.isTokenValid(jwt, userDetails.getUsername())) {
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
