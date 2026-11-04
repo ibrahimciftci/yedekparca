@@ -1,4 +1,3 @@
-
 package com.parca.yedekparca.config;
 
 import com.parca.yedekparca.security.JwtAuthenticationFilter;
@@ -11,6 +10,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -31,6 +35,7 @@ public class SecurityConfig {
             throws Exception {
 
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
 
                 // Session kullanmayacağız, JWT ile kimlik doğrulayacağız.
@@ -39,10 +44,16 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // Kayıt ve giriş herkese açık.
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login"
                         ).permitAll()
+
+                        // Admin endpoint'lerine sadece ADMIN rolü erişebilir.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // Diğer endpoint'ler giriş yapmış kullanıcılara açık.
                         .anyRequest().authenticated()
                 )
 
@@ -53,5 +64,32 @@ public class SecurityConfig {
                 );
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        configuration.setAllowedOrigins(
+                List.of("http://localhost:5173")
+        );
+
+        configuration.setAllowedMethods(
+                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        );
+
+        configuration.setAllowedHeaders(
+                List.of("Authorization", "Content-Type")
+        );
+
+        configuration.setAllowCredentials(false);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
     }
 }
