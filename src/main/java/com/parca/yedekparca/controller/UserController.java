@@ -8,6 +8,11 @@ import com.parca.yedekparca.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.parca.yedekparca.dto.UserUpdateRequest;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/api/users")
@@ -35,4 +40,23 @@ public class UserController {
                 )
         );
     }
+
+    @PutMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> updateProfile(
+            Authentication authentication,
+            @Valid @RequestBody UserUpdateRequest request) {
+
+        String email = authentication.getName();
+
+        UserResponse updatedUser =
+                userService.updateProfile(email, request);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success(
+                        "Kullanıcı profili başarıyla güncellendi.",
+                        updatedUser
+                ));
+    }
+
 }

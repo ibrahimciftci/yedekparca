@@ -8,7 +8,7 @@ import com.parca.yedekparca.dto.UserResponse;
 import com.parca.yedekparca.entity.User;
 import com.parca.yedekparca.entity.UserRole;
 import com.parca.yedekparca.repository.UserRepository;
-
+import com.parca.yedekparca.dto.UserUpdateRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -102,6 +102,24 @@ public class UserService {
                 ));
 
         return mapToUserResponse(user);
+    }
+
+
+    public UserResponse updateProfile(
+            String email,
+            UserUpdateRequest request) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Kullanıcı bulunamadı."
+                ));
+
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+
+        User updatedUser = userRepository.save(user);
+
+        return mapToUserResponse(updatedUser);
     }
 
 }
