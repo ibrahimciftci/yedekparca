@@ -52,12 +52,14 @@ public class SecurityConfig {
 
                         // Ürün kataloğu herkese açıktır; katalog görünürlüğü servis sorgusunda kısıtlanır.
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/catalog/products", "/api/catalog/products/**", "/api/catalog/categories", "/api/catalog/brands", "/api/sellers/*/profile").permitAll()
 
                         // Admin endpoint'lerine sadece ADMIN rolü erişebilir.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // Ürün yönetimi endpoint'leri satıcı rolü gerektirir.
                         .requestMatchers("/api/seller/products/**").hasRole("SELLER")
+                        .requestMatchers("/api/seller/**").hasRole("SELLER")
 
                         // Diğer endpoint'ler giriş yapmış kullanıcılara açık.
                         .anyRequest().authenticated()
@@ -82,11 +84,11 @@ public class SecurityConfig {
         );
 
         configuration.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         );
 
         configuration.setAllowedHeaders(
-                List.of("Authorization", "Content-Type")
+                List.of("Authorization", "Content-Type", "Accept")
         );
 
         configuration.setAllowCredentials(false);

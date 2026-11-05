@@ -37,7 +37,7 @@ public class ProductCreateRequest {
     private String oemNumber;
 
     @NotNull
-    @DecimalMin(value = "0.00")
+    @DecimalMin(value = "0.01")
     @DecimalMax(value = "9999999999.99")
     private BigDecimal price;
 

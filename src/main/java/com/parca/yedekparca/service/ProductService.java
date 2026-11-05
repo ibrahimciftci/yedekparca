@@ -173,6 +173,9 @@ public class ProductService {
             throw new IllegalArgumentException("Ürün fiyatı ve durumu zorunludur.");
         }
         validatePriceRange(input.price(), null);
+        if (input.price().signum() <= 0) {
+            throw new IllegalArgumentException("Fiyat sıfırdan büyük olmalıdır.");
+        }
         if (input.price().scale() > 2 || input.price().precision() > 12) {
             throw new IllegalArgumentException("Fiyat en fazla iki ondalık basamak içerebilir.");
         }

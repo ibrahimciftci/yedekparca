@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "seller_applications")
@@ -36,6 +38,16 @@ public class Seller {
 
     @Column(length = 1000)
     private String description;
+
+    @Column(name = "logo_url", length = 2048) private String logoUrl;
+    @Column(name = "whatsapp_phone", length = 20) private String whatsappPhone;
+    @Column(name = "contact_email", length = 150) private String contactEmail;
+    @Column(name = "street_address", length = 500) private String streetAddress;
+    @Column(precision = 9, scale = 6) private java.math.BigDecimal latitude;
+    @Column(precision = 9, scale = 6) private java.math.BigDecimal longitude;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "working_hours", columnDefinition = "jsonb") private String workingHours;
+    @Column(name = "website_url", length = 2048) private String websiteUrl;
+    @Column(name = "profile_active", nullable = false) @Builder.Default private Boolean profileActive = true;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

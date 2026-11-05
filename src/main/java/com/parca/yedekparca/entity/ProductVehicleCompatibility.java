@@ -19,9 +19,13 @@ public class ProductVehicleCompatibility {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "product_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id")
     private Product product;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "catalog_product_id")
+    private CatalogProduct catalogProduct;
 
     @Column(name = "vehicle_brand", nullable = false, length = 100)
     private String vehicleBrand;
