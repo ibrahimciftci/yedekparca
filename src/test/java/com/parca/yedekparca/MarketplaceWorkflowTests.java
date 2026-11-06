@@ -86,6 +86,40 @@ class MarketplaceWorkflowTests {
     }
 
     @Test
+    void adminOfferListSupportsMarketplaceFiltersAndWorkerPhotoUrls() {
+        Seller seller = seller();
+        String suffix = UUID.randomUUID().toString();
+        CatalogProduct catalog = catalogs.save(CatalogProduct.builder().name("Admin Filter " + suffix)
+                .category("Admin Category " + suffix).brand("Admin Brand " + suffix)
+                .moderationStatus(CatalogModerationStatus.APPROVED).active(true).build());
+        OfferView created = service.createOffer(seller.getUser().getEmail(), request(catalog.getId()));
+        service.reviewOffer(created.id(), true, null);
+
+        ProductOffer entity = offers.findById(created.id()).orElseThrow();
+        String key = "offers/" + UUID.randomUUID() + ".jpg";
+        String storedUrl = "https://old-bucket.r2.dev/" + key;
+        String workerUrl = "https://yedekparca-image-proxy.yedekparca.workers.dev/" + key;
+        OfferPhoto photo = OfferPhoto.builder().offer(entity).objectKey(key).publicUrl(storedUrl)
+                .displayOrder(0).primaryPhoto(true).build();
+        entity.getPhotos().add(photo);
+        photos.save(photo);
+        when(storage.publicUrl(key, storedUrl)).thenReturn(workerUrl);
+
+        var filtered = service.adminOffers("Admin Filter " + suffix, "Admin Category " + suffix,
+                "Admin Brand " + suffix, seller.getId(), ProductModerationStatus.APPROVED, true, 0, 1);
+
+        assertEquals(1, filtered.getTotalElements());
+        assertEquals(1, filtered.getContent().size());
+        assertEquals(workerUrl, filtered.getContent().get(0).photos().get(0).url());
+
+        service.setOfferActive(created.id(), false);
+        assertEquals(0, service.adminOffers(null, null, null, seller.getId(),
+                ProductModerationStatus.APPROVED, true, 0, 10).getTotalElements());
+        assertEquals(1, service.adminOffers(null, null, null, seller.getId(),
+                ProductModerationStatus.APPROVED, false, 0, 10).getTotalElements());
+    }
+
+    @Test
     void uploadedImageObjectKeyIsStoredOnTheOwningOffer() throws Exception {
         Seller seller = seller();
         CatalogProduct catalog = catalogs.save(CatalogProduct.builder().name("Image Part").category("Engine")

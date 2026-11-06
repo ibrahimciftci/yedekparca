@@ -91,8 +91,16 @@ public class MarketplaceController {
     }
 
     @GetMapping("/api/admin/offers")
-    public ApiResponse<Page<OfferView>> adminOffers(@RequestParam(required = false) ProductModerationStatus status, @RequestParam(defaultValue = "0") @Min(0) int page, @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return ApiResponse.success("İlanlar.", service.adminOffers(status, page, size));
+    public ApiResponse<Page<OfferView>> adminOffers(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) Long sellerId,
+            @RequestParam(required = false) ProductModerationStatus status,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ApiResponse.success("İlanlar.", service.adminOffers(search, category, brand, sellerId, status, active, page, size));
     }
 
     @GetMapping("/api/admin/offers/{id}")

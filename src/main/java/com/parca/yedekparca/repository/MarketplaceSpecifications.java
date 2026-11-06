@@ -11,6 +11,13 @@ public final class MarketplaceSpecifications {
     }
 
     public static Specification<ProductOffer> offers(String search, ProductCondition condition, Long sellerId, ProductModerationStatus status, Boolean active, boolean publicOnly) {
+        return offers(search, null, null, condition, sellerId, status, active, publicOnly);
+    }
+
+    public static Specification<ProductOffer> offers(String search, String category, String brand,
+                                                       ProductCondition condition, Long sellerId,
+                                                       ProductModerationStatus status, Boolean active,
+                                                       boolean publicOnly) {
         return (r, q, cb) -> {
             List<Predicate> p = new ArrayList<>();
             if (publicOnly) {
@@ -25,6 +32,12 @@ public final class MarketplaceSpecifications {
             if (search != null && !search.isBlank()) {
                 String s = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
                 p.add(cb.or(cb.like(cb.lower(r.get("catalogProduct").get("name")), s), cb.like(cb.lower(r.get("catalogProduct").get("brand")), s), cb.like(cb.lower(r.get("catalogProduct").get("oemNumber")), s)));
+            }
+            if (category != null && !category.isBlank()) {
+                p.add(cb.equal(cb.lower(r.get("catalogProduct").get("category")), category.trim().toLowerCase(Locale.ROOT)));
+            }
+            if (brand != null && !brand.isBlank()) {
+                p.add(cb.equal(cb.lower(r.get("catalogProduct").get("brand")), brand.trim().toLowerCase(Locale.ROOT)));
             }
             if (condition != null) p.add(cb.equal(r.get("condition"), condition));
             if (sellerId != null) p.add(cb.equal(r.get("seller").get("id"), sellerId));

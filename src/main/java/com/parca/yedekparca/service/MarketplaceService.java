@@ -212,7 +212,14 @@ public class MarketplaceService {
 
     @Transactional(readOnly = true)
     public Page<OfferView> adminOffers(ProductModerationStatus status, int page, int size) {
-        return offers.findAll(MarketplaceSpecifications.offers(null, null, null, status, null, false), PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt"))).map(this::view);
+        return adminOffers(null, null, null, null, status, null, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OfferView> adminOffers(String search, String category, String brand, Long sellerId,
+                                       ProductModerationStatus status, Boolean active, int page, int size) {
+        return offers.findAll(MarketplaceSpecifications.offers(search, category, brand, null, sellerId, status, active, false),
+                PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt"))).map(this::view);
     }
 
     @Transactional(readOnly = true)
