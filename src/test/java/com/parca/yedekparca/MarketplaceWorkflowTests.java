@@ -35,6 +35,8 @@ class MarketplaceWorkflowTests {
     CatalogProductRepository catalogs;
     @Autowired
     ProductOfferRepository offers;
+    @Autowired
+    OfferPhotoRepository photos;
     @MockitoBean
     ObjectStorageService storage;
 
@@ -92,15 +94,38 @@ class MarketplaceWorkflowTests {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB), "png", bytes);
         MockMultipartFile file = new MockMultipartFile("file", "part.png", "image/png", bytes.toByteArray());
+        String storedUrl = "https://images.example.test/offers/test-image.png";
         when(storage.newKey("png")).thenReturn("offers/test-image.png");
-        when(storage.put("offers/test-image.png", "image/png", file.getBytes())).thenReturn("https://images.example.test/offers/test-image.png");
+        when(storage.put("offers/test-image.png", "image/png", file.getBytes())).thenReturn(storedUrl);
+        when(storage.publicUrl("offers/test-image.png", storedUrl)).thenReturn(storedUrl);
 
         String url = service.addPhoto(seller.getUser().getEmail(), offer.id(), file);
 
-        assertEquals("https://images.example.test/offers/test-image.png", url);
+        assertEquals(storedUrl, url);
         OfferView updated = service.myOffer(seller.getUser().getEmail(), offer.id());
         assertEquals("offers/test-image.png", updated.photos().get(0).url().substring("https://images.example.test/".length()));
         assertEquals(url, updated.photos().get(0).url());
+    }
+
+    @Test
+    void marketplaceResponseResolvesLegacyPhotoUrlFromObjectKeyAndCurrentBase() {
+        Seller seller = seller();
+        CatalogProduct catalog = catalogs.save(CatalogProduct.builder().name("Existing Image Part").category("Engine")
+                .brand("PartsCo").moderationStatus(CatalogModerationStatus.APPROVED).active(true).build());
+        OfferView offer = service.createOffer(seller.getUser().getEmail(), request(catalog.getId()));
+        ProductOffer entity = offers.findById(offer.id()).orElseThrow();
+        String key = "offers/" + UUID.randomUUID() + ".jpg";
+        String storedUrl = "https://old-bucket.r2.dev/" + key;
+        String workerUrl = "https://yedekparca-image-proxy.yedekparca.workers.dev/" + key;
+        OfferPhoto photo = OfferPhoto.builder().offer(entity).objectKey(key).publicUrl(storedUrl)
+                .displayOrder(0).primaryPhoto(true).build();
+        entity.getPhotos().add(photo);
+        photos.save(photo);
+        when(storage.publicUrl(key, storedUrl)).thenReturn(workerUrl);
+
+        OfferView response = service.myOffer(seller.getUser().getEmail(), offer.id());
+
+        assertEquals(workerUrl, response.photos().get(0).url());
     }
 
     @Test

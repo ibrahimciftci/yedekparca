@@ -16,11 +16,14 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.net.URI;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.UUID;
 
 @Service
 public class R2ObjectStorageService implements ObjectStorageService {
     private static final Logger log = LoggerFactory.getLogger(R2ObjectStorageService.class);
+    private static final Pattern OFFER_IMAGE_KEY = Pattern.compile("offers/[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:jpg|jpeg|png|webp)", Pattern.CASE_INSENSITIVE);
 
     @Value("${app.storage.r2.endpoint:}")
     private String endpoint;
@@ -70,9 +73,7 @@ public class R2ObjectStorageService implements ObjectStorageService {
 
     @Override
     public String put(String key, String contentType, byte[] bytes) {
-        if (publicBaseUrl.isBlank() || !publicBaseUrl.startsWith("https://")) {
-            throw new IllegalStateException("R2_PUBLIC_BASE_URL must be a public HTTPS URL for image delivery.");
-        }
+        String publicUrl = createPublicUrl(key);
 
         try (S3Client s3 = client()) {
             PutObjectResponse response = s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).contentType(contentType).build(),
@@ -91,11 +92,21 @@ public class R2ObjectStorageService implements ObjectStorageService {
             throw new IllegalStateException("R2 S3 API connection failed: " + message);
         }
 
-        return publicBaseUrl.replaceAll("/$", "") + "/" + key;
+        return publicUrl;
+    }
+
+    @Override
+    public String publicUrl(String key, String storedUrl) {
+        validateImageKey(key);
+        if (publicBaseUrl == null || publicBaseUrl.isBlank()) {
+            return storedUrl;
+        }
+        return createPublicUrl(key);
     }
 
     @Override
     public void delete(String key) {
+        validateImageKey(key);
         try (S3Client s3 = client()) {
             s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
         } catch (S3Exception ex) {
@@ -113,7 +124,40 @@ public class R2ObjectStorageService implements ObjectStorageService {
 
     @Override
     public String newKey(String extension) {
-        return "offers/" + UUID.randomUUID() + "." + extension;
+        String normalizedExtension = extension == null ? "" : extension.toLowerCase(Locale.ROOT);
+        if (!normalizedExtension.matches("jpg|jpeg|png|webp")) {
+            throw new IllegalArgumentException("Only JPG, JPEG, PNG and WebP images are supported.");
+        }
+        return "offers/" + UUID.randomUUID() + "." + normalizedExtension;
+    }
+
+    private String createPublicUrl(String key) {
+        validateImageKey(key);
+        if (publicBaseUrl == null || publicBaseUrl.isBlank()) {
+            throw new IllegalStateException("R2_PUBLIC_BASE_URL must be set to a public HTTPS image base URL.");
+        }
+
+        URI baseUri;
+        try {
+            baseUri = URI.create(publicBaseUrl.trim());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("R2_PUBLIC_BASE_URL is invalid.");
+        }
+        String path = baseUri.getRawPath();
+        if (!"https".equalsIgnoreCase(baseUri.getScheme()) || baseUri.getHost() == null
+                || baseUri.getUserInfo() != null || baseUri.getQuery() != null || baseUri.getFragment() != null
+                || (path != null && !path.isEmpty() && !path.matches("/+"))) {
+            throw new IllegalStateException("R2_PUBLIC_BASE_URL must be a public HTTPS origin without a path, query, or fragment.");
+        }
+
+        // Validated object keys contain only URL-safe ASCII characters and exactly one slash.
+        return publicBaseUrl.trim().replaceAll("/+$", "") + "/" + key;
+    }
+
+    private void validateImageKey(String key) {
+        if (key == null || !OFFER_IMAGE_KEY.matcher(key).matches()) {
+            throw new IllegalArgumentException("Invalid offer image object key.");
+        }
     }
 
     private String safeErrorMessage(String message) {
