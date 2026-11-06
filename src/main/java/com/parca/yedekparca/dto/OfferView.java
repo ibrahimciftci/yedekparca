@@ -10,7 +10,9 @@ public record OfferView(Long id, Long catalogProductId, String name, String desc
                         String category, String brand, String oemNumber, BigDecimal price, Integer stockQuantity,
                         ProductCondition condition, ProductModerationStatus moderationStatus, String rejectionReason,
                         Boolean active, LocalDateTime priceUpdatedAt, LocalDateTime stockUpdatedAt,
-                        String legacyImageUrl, List<OfferPhotoView> photos, Long sellerId, String sellerName,
+                        String legacyImageUrl, List<OfferPhotoView> photos,
+                        List<ProductVehicleCompatibilityResponse> vehicleCompatibilities,
+                        Long sellerId, String sellerName,
                         String sellerPhone, String whatsappPhone, String city, String district, String sellerLogo,
                         java.math.BigDecimal latitude, java.math.BigDecimal longitude, String streetAddress,
                         LocalDateTime createdAt) {

@@ -21,14 +21,17 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final SellerRepository sellerRepository;
+    private final VehicleModelRepository vehicleModels;
 
     public ProductService(
             ProductRepository productRepository,
             UserRepository userRepository,
-            SellerRepository sellerRepository) {
+            SellerRepository sellerRepository,
+            VehicleModelRepository vehicleModels) {
         this.productRepository = productRepository;
         this.userRepository = userRepository;
         this.sellerRepository = sellerRepository;
+        this.vehicleModels = vehicleModels;
     }
 
     @Transactional
@@ -184,13 +187,20 @@ public class ProductService {
         }
         validateImageUrl(input.imageUrl());
         Set<CompatibilityKey> keys = new HashSet<>();
+        Set<Long> modelIds = new HashSet<>();
         for (ProductVehicleCompatibilityRequest compatibility : input.vehicleCompatibilities()) {
             if (compatibility.getYearFrom() == null || compatibility.getYearTo() == null
                     || compatibility.getYearFrom() > compatibility.getYearTo()) {
                 throw new IllegalArgumentException("Araç yıl aralığı geçersiz.");
             }
+            if (compatibility.getVehicleModelId() == null
+                    && (compatibility.getVehicleBrand() == null || compatibility.getVehicleBrand().isBlank()
+                    || compatibility.getVehicleModel() == null || compatibility.getVehicleModel().isBlank())) {
+                throw new IllegalArgumentException("Araç modeli seçilmelidir.");
+            }
             CompatibilityKey key = CompatibilityKey.from(compatibility);
-            if (!keys.add(key)) {
+            if (!keys.add(key) || compatibility.getVehicleModelId() != null
+                    && !modelIds.add(compatibility.getVehicleModelId())) {
                 throw new IllegalArgumentException("Aynı araç uyumluluğu birden fazla eklenemez.");
             }
         }
@@ -223,7 +233,7 @@ public class ProductService {
     private Set<CompatibilityKey> compatibilityKeys(List<ProductVehicleCompatibility> items) {
         Set<CompatibilityKey> keys = new HashSet<>();
         for (ProductVehicleCompatibility item : items) {
-            keys.add(new CompatibilityKey(normalize(item.getVehicleBrand()), normalize(item.getVehicleModel()),
+            keys.add(new CompatibilityKey(item.getModel() == null ? null : item.getModel().getId(), normalize(item.getVehicleBrand()), normalize(item.getVehicleModel()),
                     item.getYearFrom(), item.getYearTo(), normalize(item.getEngineInfo())));
         }
         return keys;
@@ -248,10 +258,12 @@ public class ProductService {
 
         product.getVehicleCompatibilities().clear();
         for (ProductVehicleCompatibilityRequest request : input.vehicleCompatibilities()) {
+            VehicleModel vehicleModel = resolveVehicleModel(request);
             product.getVehicleCompatibilities().add(ProductVehicleCompatibility.builder()
                     .product(product)
-                    .vehicleBrand(clean(request.getVehicleBrand()))
-                    .vehicleModel(clean(request.getVehicleModel()))
+                    .model(vehicleModel)
+                    .vehicleBrand(vehicleModel == null ? clean(request.getVehicleBrand()) : vehicleModel.getBrand().getName())
+                    .vehicleModel(vehicleModel == null ? clean(request.getVehicleModel()) : vehicleModel.getName())
                     .yearFrom(request.getYearFrom())
                     .yearTo(request.getYearTo())
                     .engineInfo(cleanNullable(request.getEngineInfo()))
@@ -306,14 +318,32 @@ public class ProductService {
     }
 
     private List<ProductVehicleCompatibilityResponse> mapCompatibilities(Product product) {
-        return product.getVehicleCompatibilities().stream().map(item -> ProductVehicleCompatibilityResponse.builder()
-                .id(item.getId())
-                .vehicleBrand(item.getVehicleBrand())
-                .vehicleModel(item.getVehicleModel())
-                .yearFrom(item.getYearFrom())
-                .yearTo(item.getYearTo())
-                .engineInfo(item.getEngineInfo())
-                .build()).toList();
+        return product.getVehicleCompatibilities().stream().map(this::compatibilityResponse).toList();
+    }
+
+    private ProductVehicleCompatibilityResponse compatibilityResponse(ProductVehicleCompatibility item) {
+        VehicleModel model = item.getModel();
+        return ProductVehicleCompatibilityResponse.builder().id(item.getId())
+                .vehicleModelId(model == null ? null : model.getId())
+                .vehicleBrandId(model == null ? null : model.getBrand().getId())
+                .vehicleTypeIds(model == null ? List.of() : model.getTypes().stream().map(VehicleType::getId).toList())
+                .vehicleBrand(model == null ? item.getVehicleBrand() : model.getBrand().getName())
+                .vehicleModel(model == null ? item.getVehicleModel() : model.getName())
+                .yearFrom(item.getYearFrom()).yearTo(item.getYearTo()).engineInfo(item.getEngineInfo()).build();
+    }
+
+    private VehicleModel resolveVehicleModel(ProductVehicleCompatibilityRequest request) {
+        if (request.getVehicleModelId() == null) return null;
+        VehicleModel model = vehicleModels.findById(request.getVehicleModelId())
+                .filter(VehicleModel::getActive)
+                .orElseThrow(() -> new IllegalArgumentException("Seçilen araç modeli bulunamadı veya pasif."));
+        if (request.getVehicleBrand() != null && !request.getVehicleBrand().isBlank()
+                && !request.getVehicleBrand().trim().equalsIgnoreCase(model.getBrand().getName())
+                || request.getVehicleModel() != null && !request.getVehicleModel().isBlank()
+                && !request.getVehicleModel().trim().equalsIgnoreCase(model.getName())) {
+            throw new IllegalArgumentException("Araç modeli ve marka bilgileri uyuşmuyor.");
+        }
+        return model;
     }
 
     private <T, R> ProductPageResponse<R> mapPage(Page<T> page, java.util.function.Function<T, R> mapper) {
@@ -374,10 +404,10 @@ public class ProductService {
         }
     }
 
-    private record CompatibilityKey(String brand, String model, Integer yearFrom, Integer yearTo, String engine) {
+    private record CompatibilityKey(Long vehicleModelId, String brand, String model, Integer yearFrom, Integer yearTo, String engine) {
         static CompatibilityKey from(ProductVehicleCompatibilityRequest request) {
-            return new CompatibilityKey(request.getVehicleBrand().trim().toLowerCase(Locale.ROOT),
-                    request.getVehicleModel().trim().toLowerCase(Locale.ROOT), request.getYearFrom(),
+            return new CompatibilityKey(request.getVehicleModelId(), request.getVehicleBrand() == null ? "" : request.getVehicleBrand().trim().toLowerCase(Locale.ROOT),
+                    request.getVehicleModel() == null ? "" : request.getVehicleModel().trim().toLowerCase(Locale.ROOT), request.getYearFrom(),
                     request.getYearTo(), request.getEngineInfo() == null ? ""
                     : request.getEngineInfo().trim().toLowerCase(Locale.ROOT));
         }

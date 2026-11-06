@@ -5,6 +5,7 @@ import com.parca.yedekparca.entity.*;
 import com.parca.yedekparca.repository.*;
 import com.parca.yedekparca.service.MarketplaceService;
 import com.parca.yedekparca.service.ObjectStorageService;
+import com.parca.yedekparca.service.VehicleCatalogService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,8 @@ class MarketplaceWorkflowTests {
     OfferPhotoRepository photos;
     @MockitoBean
     ObjectStorageService storage;
+    @Autowired
+    VehicleCatalogService vehicleCatalog;
 
     @Test
     void approvedSellerCanProposeCatalogAndOfferStartsPending() {
@@ -204,10 +207,20 @@ class MarketplaceWorkflowTests {
         catalog = catalogs.save(catalog);
         Long catalogId = catalog.getId();
 
-        OfferView first = service.createOffer(firstSeller.getUser().getEmail(), request(catalogId));
+        ProductVehicleCompatibilityRequest legacyFitment = new ProductVehicleCompatibilityRequest();
+        legacyFitment.setVehicleBrand("Acme");
+        legacyFitment.setVehicleModel("Touring");
+        legacyFitment.setYearFrom(2020);
+        legacyFitment.setYearTo(2024);
+        legacyFitment.setEngineInfo("2.0");
+        OfferWriteRequest firstRequest = new OfferWriteRequest(catalogId, "Wheel Bearing", null,
+                "Chassis", "PartsCo", null, new BigDecimal("15.00"), 2, ProductCondition.NEW,
+                java.util.List.of(legacyFitment));
+        OfferView first = service.createOffer(firstSeller.getUser().getEmail(), firstRequest);
         service.reviewOffer(first.id(), true, null);
         OfferWriteRequest cheaperRequest = new OfferWriteRequest(catalogId, "Wheel Bearing", null,
-                "Chassis", "PartsCo", null, new BigDecimal("9.00"), 1, ProductCondition.NEW, java.util.List.of());
+                "Chassis", "PartsCo", null, new BigDecimal("9.00"), 1, ProductCondition.NEW,
+                java.util.List.of(legacyFitment));
         OfferView cheaper = service.createOffer(secondSeller.getUser().getEmail(), cheaperRequest);
         service.reviewOffer(cheaper.id(), true, null);
 
@@ -218,7 +231,42 @@ class MarketplaceWorkflowTests {
         assertEquals(2, result.getContent().get(0).offers().size());
         assertEquals(cheaper.id(), result.getContent().get(0).offers().get(0).id());
         assertThrows(IllegalArgumentException.class,
-                () -> service.createOffer(firstSeller.getUser().getEmail(), request(catalogId)));
+                () -> service.createOffer(firstSeller.getUser().getEmail(), firstRequest));
+    }
+
+    @Test
+    void sellerCompatibilityUsesCentralModelAndPublicCatalogFiltersByItsIds() {
+        Seller seller = seller();
+        var type = vehicleCatalog.listTypes().get(0);
+        var brand = vehicleCatalog.listBrands(type.id()).get(0);
+        var model = vehicleCatalog.listModels(brand.id(), type.id()).get(0);
+        ProductVehicleCompatibilityRequest fitment = new ProductVehicleCompatibilityRequest();
+        fitment.setVehicleModelId(model.id());
+        fitment.setYearFrom(2010);
+        fitment.setYearTo(2020);
+        fitment.setEngineInfo("2.0");
+
+        OfferView offer = service.createOffer(seller.getUser().getEmail(), new OfferWriteRequest(null,
+                "Central vehicle part", "description", "Engine", "PartsCo", null,
+                new BigDecimal("25.00"), 2, ProductCondition.NEW, java.util.List.of(fitment)));
+        service.reviewCatalog(offer.catalogProductId(), true, null);
+        service.reviewOffer(offer.id(), true, null);
+
+        CatalogProduct stored = catalogs.findById(offer.catalogProductId()).orElseThrow();
+        assertEquals(model.id(), stored.getVehicleCompatibilities().get(0).getModel().getId());
+        assertEquals(model.id(), service.myOffer(seller.getUser().getEmail(), offer.id())
+                .vehicleCompatibilities().get(0).getVehicleModelId());
+        var filtered = service.publicCatalog(null, null, null, null, null, null, null,
+                null, null, null, null, type.id(), brand.id(), model.id(), 0, 20);
+        assertTrue(filtered.getContent().stream().anyMatch(item -> item.id().equals(offer.catalogProductId())));
+
+        ProductVehicleCompatibilityRequest duplicate = new ProductVehicleCompatibilityRequest();
+        duplicate.setVehicleModelId(model.id());
+        duplicate.setYearFrom(2021);
+        duplicate.setYearTo(2024);
+        assertThrows(IllegalArgumentException.class, () -> service.createOffer(seller.getUser().getEmail(),
+                new OfferWriteRequest(null, "Duplicate vehicle part", null, "Engine", "PartsCo", null,
+                        new BigDecimal("25.00"), 2, ProductCondition.NEW, java.util.List.of(fitment, duplicate))));
     }
 
     @Test

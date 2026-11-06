@@ -27,6 +27,10 @@ public class ProductVehicleCompatibility {
     @JoinColumn(name = "catalog_product_id")
     private CatalogProduct catalogProduct;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vehicle_model_id")
+    private VehicleModel model;
+
     @Column(name = "vehicle_brand", nullable = false, length = 100)
     private String vehicleBrand;
 

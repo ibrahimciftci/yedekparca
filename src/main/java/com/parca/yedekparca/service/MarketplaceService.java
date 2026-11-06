@@ -24,8 +24,9 @@ public class MarketplaceService {
     private final UserFavoriteRepository favorites;
     private final ComplaintRepository complaints;
     private final ProductRepository legacyProducts;
+    private final VehicleModelRepository vehicleModels;
 
-    public MarketplaceService(CatalogProductRepository c, ProductOfferRepository o, SellerRepository s, UserRepository u, OfferPhotoRepository p, ObjectStorageService st, UserFavoriteRepository f, ComplaintRepository cr, ProductRepository legacyProducts) {
+    public MarketplaceService(CatalogProductRepository c, ProductOfferRepository o, SellerRepository s, UserRepository u, OfferPhotoRepository p, ObjectStorageService st, UserFavoriteRepository f, ComplaintRepository cr, ProductRepository legacyProducts, VehicleModelRepository vehicleModels) {
         catalogs = c;
         offers = o;
         sellers = s;
@@ -35,6 +36,7 @@ public class MarketplaceService {
         favorites = f;
         complaints = cr;
         this.legacyProducts = legacyProducts;
+        this.vehicleModels = vehicleModels;
     }
 
     private Seller approvedSeller(String email) {
@@ -109,6 +111,9 @@ public class MarketplaceService {
             c = catalogs.findById(r.catalogProductId()).orElseThrow(() -> new IllegalArgumentException("Katalog ürünü bulunamadı."));
             if (c.getModerationStatus() != CatalogModerationStatus.APPROVED || !c.getActive())
                 throw new IllegalArgumentException("Yalnızca onaylı katalog ürününe ilan verilebilir.");
+            if (r.vehicleCompatibilities() != null && !sameCompatibilities(c, r.vehicleCompatibilities())) {
+                c = cloneCatalog(c, r.vehicleCompatibilities());
+            }
         } else {
             c = catalogs.save(CatalogProduct.builder().name(r.name().trim()).description(blank(r.description())).category(r.category().trim()).brand(r.brand().trim()).oemNumber(blank(r.oemNumber())).moderationStatus(CatalogModerationStatus.PENDING).active(true).build());
             replaceCompatibility(c, r.vehicleCompatibilities());
@@ -146,18 +151,30 @@ public class MarketplaceService {
                     || !Objects.equals(targetCatalog.getBrand(), r.brand().trim())
                     || !Objects.equals(targetCatalog.getOemNumber(), blank(r.oemNumber()))
                     || !Objects.equals(targetCatalog.getDescription(), blank(r.description()));
-            if (detailsChanged) {
-                targetCatalog = catalogs.save(CatalogProduct.builder().name(r.name().trim())
-                        .description(blank(r.description())).category(r.category().trim()).brand(r.brand().trim())
-                        .oemNumber(blank(r.oemNumber())).moderationStatus(CatalogModerationStatus.PENDING)
-                        .active(true).build());
-                replaceCompatibility(targetCatalog, r.vehicleCompatibilities());
+            boolean compatibilityChanged = r.vehicleCompatibilities() != null && !sameCompatibilities(targetCatalog, r.vehicleCompatibilities());
+            if (detailsChanged || compatibilityChanged) {
+                CatalogProduct proposed = CatalogProduct.builder()
+                        .name(detailsChanged ? r.name().trim() : targetCatalog.getName())
+                        .description(detailsChanged ? blank(r.description()) : targetCatalog.getDescription())
+                        .category(detailsChanged ? r.category().trim() : targetCatalog.getCategory())
+                        .brand(detailsChanged ? r.brand().trim() : targetCatalog.getBrand())
+                        .oemNumber(detailsChanged ? blank(r.oemNumber()) : targetCatalog.getOemNumber())
+                        .moderationStatus(CatalogModerationStatus.PENDING).active(true).build();
+                targetCatalog = catalogs.save(proposed);
+                if (r.vehicleCompatibilities() == null) copyCompatibilities(targetCatalog, o.getCatalogProduct());
+                else replaceCompatibility(targetCatalog, r.vehicleCompatibilities());
                 catalogChanged = true;
             }
         } else if (!Objects.equals(r.catalogProductId(), targetCatalog.getId())) {
-            targetCatalog = catalogs.findById(r.catalogProductId())
+            CatalogProduct selectedCatalog = catalogs.findById(r.catalogProductId())
                     .filter(c -> c.getModerationStatus() == CatalogModerationStatus.APPROVED && Boolean.TRUE.equals(c.getActive()))
                     .orElseThrow(() -> new IllegalArgumentException("Only approved active catalog products can be selected."));
+            if (r.vehicleCompatibilities() != null && !sameCompatibilities(selectedCatalog, r.vehicleCompatibilities()))
+                selectedCatalog = cloneCatalog(selectedCatalog, r.vehicleCompatibilities());
+            targetCatalog = selectedCatalog;
+            catalogChanged = true;
+        } else if (r.vehicleCompatibilities() != null && !sameCompatibilities(targetCatalog, r.vehicleCompatibilities())) {
+            targetCatalog = cloneCatalog(targetCatalog, r.vehicleCompatibilities());
             catalogChanged = true;
         }
         if (catalogChanged && offers.existsBySellerIdAndCatalogProductIdAndCondition(s.getId(), targetCatalog.getId(), r.condition()))
@@ -201,9 +218,17 @@ public class MarketplaceService {
 
     @Transactional(readOnly = true)
     public Page<CatalogView> publicCatalog(String search, String category, String brand, String oem, java.math.BigDecimal min, java.math.BigDecimal max, ProductCondition condition, String vehicleBrand, String vehicleModel, Integer year, String engine, int page, int size) {
+        return publicCatalog(search, category, brand, oem, min, max, condition, vehicleBrand, vehicleModel, year, engine, null, null, null, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CatalogView> publicCatalog(String search, String category, String brand, String oem,
+            java.math.BigDecimal min, java.math.BigDecimal max, ProductCondition condition,
+            String vehicleBrand, String vehicleModel, Integer year, String engine,
+            Long vehicleTypeId, Long vehicleBrandId, Long vehicleModelId, int page, int size) {
         if (min != null && min.signum() < 0 || max != null && max.signum() < 0 || min != null && max != null && min.compareTo(max) > 0)
             throw new IllegalArgumentException("Fiyat filtresi geçersiz.");
-        Page<CatalogProduct> p = catalogs.findAll(CatalogSpecifications.publicSearch(search, category, brand, oem, min, max, condition, vehicleBrand, vehicleModel, year, engine), PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt")));
+        Page<CatalogProduct> p = catalogs.findAll(CatalogSpecifications.publicSearch(search, category, brand, oem, min, max, condition, vehicleBrand, vehicleModel, year, engine, vehicleTypeId, vehicleBrandId, vehicleModelId), PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt")));
         return p.map(c -> {
             List<OfferView> valid = offers.findPublicByCatalog(c.getId()).stream().filter(o -> condition == null || o.getCondition() == condition).filter(o -> min == null || o.getPrice().compareTo(min) >= 0).filter(o -> max == null || o.getPrice().compareTo(max) <= 0).map(this::view).toList();
             return catalogView(c, valid);
@@ -433,19 +458,65 @@ public class MarketplaceService {
     private void replaceCompatibility(CatalogProduct c, List<ProductVehicleCompatibilityRequest> rs) {
         if (rs == null) return;
         Set<String> seen = new HashSet<>();
+        Set<Long> selectedModels = new HashSet<>();
         for (var r : rs) {
             if (r.getYearFrom() == null || r.getYearTo() == null || r.getYearFrom() > r.getYearTo())
                 throw new IllegalArgumentException("Araç yılı geçersiz.");
-            String k = (r.getVehicleBrand() + "|" + r.getVehicleModel() + "|" + r.getYearFrom() + "|" + r.getYearTo() + "|" + r.getEngineInfo()).toLowerCase(Locale.ROOT);
-            if (!seen.add(k)) throw new IllegalArgumentException("Tekrarlı araç uyumluluğu.");
-            c.getVehicleCompatibilities().add(ProductVehicleCompatibility.builder().catalogProduct(c).vehicleBrand(r.getVehicleBrand().trim()).vehicleModel(r.getVehicleModel().trim()).yearFrom(r.getYearFrom()).yearTo(r.getYearTo()).engineInfo(r.getEngineInfo()).build());
+            VehicleModel model = resolveVehicleModel(r);
+            String vehicleBrand = model == null ? cleanRequired(r.getVehicleBrand(), "Araç markası zorunludur.") : model.getBrand().getName();
+            String vehicleModel = model == null ? cleanRequired(r.getVehicleModel(), "Araç modeli zorunludur.") : model.getName();
+            String k = (model == null ? normalize(vehicleBrand + "|" + vehicleModel) : model.getId().toString()) + "|" + r.getYearFrom() + "|" + r.getYearTo() + "|" + normalize(r.getEngineInfo());
+            if (!seen.add(k) || model != null && !selectedModels.add(model.getId())) throw new IllegalArgumentException("Tekrarlı araç uyumluluğu.");
+            c.getVehicleCompatibilities().add(ProductVehicleCompatibility.builder().catalogProduct(c).model(model).vehicleBrand(vehicleBrand).vehicleModel(vehicleModel).yearFrom(r.getYearFrom()).yearTo(r.getYearTo()).engineInfo(blank(r.getEngineInfo())).build());
+        }
+    }
+
+    private VehicleModel resolveVehicleModel(ProductVehicleCompatibilityRequest request) {
+        if (request.getVehicleModelId() == null) return null;
+        VehicleModel model = vehicleModels.findById(request.getVehicleModelId()).filter(VehicleModel::getActive)
+                .orElseThrow(() -> new IllegalArgumentException("Seçilen araç modeli bulunamadı veya pasif."));
+        if (request.getVehicleBrand() != null && !request.getVehicleBrand().isBlank()
+                && !request.getVehicleBrand().trim().equalsIgnoreCase(model.getBrand().getName())
+                || request.getVehicleModel() != null && !request.getVehicleModel().isBlank()
+                && !request.getVehicleModel().trim().equalsIgnoreCase(model.getName()))
+            throw new IllegalArgumentException("Araç modeli ve marka bilgileri uyuşmuyor.");
+        return model;
+    }
+
+    private boolean sameCompatibilities(CatalogProduct catalog, List<ProductVehicleCompatibilityRequest> requests) {
+        Set<String> current = catalog.getVehicleCompatibilities().stream().map(item -> {
+            VehicleModel model = item.getModel();
+            String modelKey = model == null ? normalize(item.getVehicleBrand() + "|" + item.getVehicleModel()) : model.getId().toString();
+            return modelKey + "|" + item.getYearFrom() + "|" + item.getYearTo() + "|" + normalize(item.getEngineInfo());
+        }).collect(java.util.stream.Collectors.toSet());
+        Set<String> incoming = requests.stream().map(request -> {
+            VehicleModel model = resolveVehicleModel(request);
+            String modelKey = model == null ? normalize(String.valueOf(request.getVehicleBrand()) + "|" + request.getVehicleModel()) : model.getId().toString();
+            return modelKey + "|" + request.getYearFrom() + "|" + request.getYearTo() + "|" + normalize(request.getEngineInfo());
+        }).collect(java.util.stream.Collectors.toSet());
+        return current.equals(incoming);
+    }
+
+    private CatalogProduct cloneCatalog(CatalogProduct source, List<ProductVehicleCompatibilityRequest> compatibilities) {
+        CatalogProduct clone = catalogs.save(CatalogProduct.builder().name(source.getName()).description(source.getDescription())
+                .category(source.getCategory()).brand(source.getBrand()).oemNumber(source.getOemNumber())
+                .moderationStatus(CatalogModerationStatus.PENDING).active(true).build());
+        replaceCompatibility(clone, compatibilities);
+        return clone;
+    }
+
+    private void copyCompatibilities(CatalogProduct target, CatalogProduct source) {
+        for (ProductVehicleCompatibility item : source.getVehicleCompatibilities()) {
+            target.getVehicleCompatibilities().add(ProductVehicleCompatibility.builder().catalogProduct(target)
+                    .model(item.getModel()).vehicleBrand(item.getVehicleBrand()).vehicleModel(item.getVehicleModel())
+                    .yearFrom(item.getYearFrom()).yearTo(item.getYearTo()).engineInfo(item.getEngineInfo()).build());
         }
     }
 
     private OfferView view(ProductOffer o) {
         CatalogProduct c = o.getCatalogProduct();
         Seller s = o.getSeller();
-        return new OfferView(o.getId(), c.getId(), c.getName(), c.getDescription(), o.getOfferDescription(), c.getCategory(), c.getBrand(), c.getOemNumber(), o.getPrice(), o.getStockQuantity(), o.getCondition(), o.getModerationStatus(), o.getRejectionReason(), o.getActive(), o.getPriceUpdatedAt(), o.getStockUpdatedAt(), o.getLegacyProductId() == null ? null : legacyImage(o.getLegacyProductId()), o.getPhotos().stream().map(x -> new OfferPhotoView(x.getId(), storage.publicUrl(x.getObjectKey(), x.getPublicUrl()), x.getDisplayOrder(), x.getPrimaryPhoto())).toList(), s.getId(), s.getStoreName(), s.getPhone(), s.getWhatsappPhone(), s.getCity(), s.getDistrict(), s.getLogoUrl(), s.getLatitude(), s.getLongitude(), s.getStreetAddress(), o.getCreatedAt());
+        return new OfferView(o.getId(), c.getId(), c.getName(), c.getDescription(), o.getOfferDescription(), c.getCategory(), c.getBrand(), c.getOemNumber(), o.getPrice(), o.getStockQuantity(), o.getCondition(), o.getModerationStatus(), o.getRejectionReason(), o.getActive(), o.getPriceUpdatedAt(), o.getStockUpdatedAt(), o.getLegacyProductId() == null ? null : legacyImage(o.getLegacyProductId()), o.getPhotos().stream().map(x -> new OfferPhotoView(x.getId(), storage.publicUrl(x.getObjectKey(), x.getPublicUrl()), x.getDisplayOrder(), x.getPrimaryPhoto())).toList(), c.getVehicleCompatibilities().stream().map(this::compatibilityResponse).toList(), s.getId(), s.getStoreName(), s.getPhone(), s.getWhatsappPhone(), s.getCity(), s.getDistrict(), s.getLogoUrl(), s.getLatitude(), s.getLongitude(), s.getStreetAddress(), o.getCreatedAt());
     }
 
     private String legacyImage(Long id) {
@@ -453,7 +524,26 @@ public class MarketplaceService {
     }
 
     private CatalogView catalogView(CatalogProduct c, List<OfferView> os) {
-        return new CatalogView(c.getId(), c.getName(), c.getDescription(), c.getCategory(), c.getBrand(), c.getOemNumber(), c.getModerationStatus().name(), c.getActive(), c.getVehicleCompatibilities().stream().map(v -> ProductVehicleCompatibilityResponse.builder().id(v.getId()).vehicleBrand(v.getVehicleBrand()).vehicleModel(v.getVehicleModel()).yearFrom(v.getYearFrom()).yearTo(v.getYearTo()).engineInfo(v.getEngineInfo()).build()).toList(), os);
+        return new CatalogView(c.getId(), c.getName(), c.getDescription(), c.getCategory(), c.getBrand(), c.getOemNumber(), c.getModerationStatus().name(), c.getActive(), c.getVehicleCompatibilities().stream().map(this::compatibilityResponse).toList(), os);
+    }
+
+    private ProductVehicleCompatibilityResponse compatibilityResponse(ProductVehicleCompatibility item) {
+        VehicleModel model = item.getModel();
+        return ProductVehicleCompatibilityResponse.builder().id(item.getId()).vehicleModelId(model == null ? null : model.getId())
+                .vehicleBrandId(model == null ? null : model.getBrand().getId())
+                .vehicleTypeIds(model == null ? List.of() : model.getTypes().stream().map(VehicleType::getId).toList())
+                .vehicleBrand(model == null ? item.getVehicleBrand() : model.getBrand().getName())
+                .vehicleModel(model == null ? item.getVehicleModel() : model.getName()).yearFrom(item.getYearFrom())
+                .yearTo(item.getYearTo()).engineInfo(item.getEngineInfo()).build();
+    }
+
+    private String cleanRequired(String value, String message) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(message);
+        return value.trim();
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
     private ComplaintView complaint(Complaint c) {

@@ -24,8 +24,22 @@ public class MarketplaceController {
     }
 
     @GetMapping("/api/catalog/products")
-    public ApiResponse<Page<CatalogView>> catalog(@RequestParam(required = false) String search, @RequestParam(required = false) String category, @RequestParam(required = false) String brand, @RequestParam(required = false) String oemNumber, @RequestParam(required = false) @jakarta.validation.constraints.DecimalMin("0.00") java.math.BigDecimal minPrice, @RequestParam(required = false) @jakarta.validation.constraints.DecimalMin("0.00") java.math.BigDecimal maxPrice, @RequestParam(required = false) ProductCondition condition, @RequestParam(required = false) String vehicleBrand, @RequestParam(required = false) String vehicleModel, @RequestParam(required = false) @Min(1886) Integer modelYear, @RequestParam(required = false) String engineInfo, @RequestParam(defaultValue = "0") @Min(0) int page, @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
-        return ApiResponse.success("Katalog ürünleri.", service.publicCatalog(search, category, brand, oemNumber, minPrice, maxPrice, condition, vehicleBrand, vehicleModel, modelYear, engineInfo, page, size));
+    public ApiResponse<Page<CatalogView>> catalog(@RequestParam(required = false) String search,
+            @RequestParam(required = false) String category, @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String oemNumber,
+            @RequestParam(required = false) @jakarta.validation.constraints.DecimalMin("0.00") java.math.BigDecimal minPrice,
+            @RequestParam(required = false) @jakarta.validation.constraints.DecimalMin("0.00") java.math.BigDecimal maxPrice,
+            @RequestParam(required = false) ProductCondition condition,
+            @RequestParam(required = false) String vehicleBrand, @RequestParam(required = false) String vehicleModel,
+            @RequestParam(required = false) Long vehicleTypeId, @RequestParam(required = false) Long vehicleBrandId,
+            @RequestParam(required = false) Long vehicleModelId,
+            @RequestParam(required = false) @Min(1886) Integer modelYear,
+            @RequestParam(required = false) String engineInfo,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
+        return ApiResponse.success("Katalog ürünleri.", service.publicCatalog(search, category, brand, oemNumber,
+                minPrice, maxPrice, condition, vehicleBrand, vehicleModel, modelYear, engineInfo,
+                vehicleTypeId, vehicleBrandId, vehicleModelId, page, size));
     }
 
     @GetMapping("/api/catalog/products/{id}")

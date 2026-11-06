@@ -12,6 +12,12 @@ public final class CatalogSpecifications {
     }
 
     public static Specification<CatalogProduct> publicSearch(String search, String category, String brand, String oem, BigDecimal min, BigDecimal max, ProductCondition condition, String vehicleBrand, String vehicleModel, Integer year, String engine) {
+        return publicSearch(search, category, brand, oem, min, max, condition, vehicleBrand, vehicleModel, year, engine, null, null, null);
+    }
+
+    public static Specification<CatalogProduct> publicSearch(String search, String category, String brand, String oem,
+            BigDecimal min, BigDecimal max, ProductCondition condition, String vehicleBrand, String vehicleModel,
+            Integer year, String engine, Long vehicleTypeId, Long vehicleBrandId, Long vehicleModelId) {
         return (r, q, cb) -> {
             List<Predicate> p = new ArrayList<>();
             p.add(cb.equal(r.get("moderationStatus"), CatalogModerationStatus.APPROVED));
@@ -33,11 +39,15 @@ public final class CatalogSpecifications {
                 sq.select(o.get("id")).where(cb.and(x.toArray(Predicate[]::new)));
                 p.add(cb.exists(sq));
             }
-            if (text(vehicleBrand) || text(vehicleModel) || year != null || text(engine)) {
+            if (text(vehicleBrand) || text(vehicleModel) || year != null || text(engine)
+                    || vehicleTypeId != null || vehicleBrandId != null || vehicleModelId != null) {
                 Subquery<Long> sq = q.subquery(Long.class);
                 Root<ProductVehicleCompatibility> v = sq.from(ProductVehicleCompatibility.class);
                 List<Predicate> x = new ArrayList<>();
                 x.add(cb.equal(v.get("catalogProduct").get("id"), r.get("id")));
+                if (vehicleModelId != null) x.add(cb.equal(v.get("model").get("id"), vehicleModelId));
+                if (vehicleBrandId != null) x.add(cb.equal(v.get("model").get("brand").get("id"), vehicleBrandId));
+                if (vehicleTypeId != null) x.add(cb.equal(v.join("model").join("types").get("id"), vehicleTypeId));
                 eq(x, v, cb, "vehicleBrand", vehicleBrand);
                 eq(x, v, cb, "vehicleModel", vehicleModel);
                 like(x, v, cb, "engineInfo", engine);
