@@ -52,6 +52,21 @@ public class MarketplaceController {
         return ApiResponse.success("Firma profili.", service.publicProfile(id));
     }
 
+    @GetMapping({"/api/sellers", "/api/catalog/products/sellers"})
+    public ApiResponse<Page<PublicSellerView>> publicSellers(
+            @RequestParam(required = false) String name, @RequestParam(required = false) String city,
+            @RequestParam(required = false) String district, @RequestParam(required = false) Long cityId,
+            @RequestParam(required = false) Long districtId, @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
+        return ApiResponse.success("Onaylı satıcılar.", service.publicSellers(name, city, district, cityId, districtId, page, size));
+    }
+
+    @GetMapping("/api/sellers/{id}/offers")
+    public ApiResponse<Page<OfferView>> publicSellerOffers(@PathVariable Long id,
+            @RequestParam(defaultValue = "0") @Min(0) int page, @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
+        return ApiResponse.success("Satıcının onaylı ilanları.", service.publicSellerOffers(id, page, size));
+    }
+
     @GetMapping("/api/seller/profile")
     public ApiResponse<SellerProfileView> myProfile(Authentication a) {
         return ApiResponse.success("Firma profili.", service.myProfile(a.getName()));
@@ -65,6 +80,16 @@ public class MarketplaceController {
     @PutMapping("/api/seller/profile")
     public ApiResponse<SellerProfileView> updateProfile(Authentication a, @Valid @RequestBody SellerProfileUpdateRequest r) {
         return ApiResponse.success("Firma profili güncellendi.", service.updateProfile(a.getName(), r));
+    }
+
+    @PostMapping(value = "/api/seller/profile/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<SellerProfileView> uploadSellerLogo(Authentication a, @RequestPart("file") MultipartFile file) {
+        return ApiResponse.success("Firma logosu güncellendi.", service.uploadSellerLogo(a.getName(), file));
+    }
+
+    @DeleteMapping("/api/seller/profile/logo")
+    public ApiResponse<SellerProfileView> deleteSellerLogo(Authentication a) {
+        return ApiResponse.success("Firma logosu kaldırıldı.", service.deleteSellerLogo(a.getName()));
     }
 
     @PostMapping("/api/seller/offers")

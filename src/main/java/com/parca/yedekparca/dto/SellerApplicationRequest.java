@@ -1,6 +1,7 @@
 package com.parca.yedekparca.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +15,7 @@ public class SellerApplicationRequest {
     private String storeName;
 
     @NotBlank(message = "Telefon numarası boş bırakılamaz.")
-    @Size(max = 20)
+    @Pattern(regexp = "[+0-9() -]{7,20}", message = "Geçerli bir telefon numarası girin.")
     private String phone;
 
     @NotBlank(message = "Şehir boş bırakılamaz.")
@@ -24,6 +25,12 @@ public class SellerApplicationRequest {
     @NotBlank(message = "İlçe boş bırakılamaz.")
     @Size(max = 100)
     private String district;
+
+    @jakarta.validation.constraints.Positive
+    private Long cityId;
+
+    @jakarta.validation.constraints.Positive
+    private Long districtId;
 
     @Size(max = 1000)
     private String description;

@@ -36,6 +36,12 @@ public class Seller {
     @Column(nullable = false, length = 100)
     private String district;
 
+    @Column(name = "city_id")
+    private Long cityId;
+
+    @Column(name = "district_id")
+    private Long districtId;
+
     @Column(length = 1000)
     private String description;
 

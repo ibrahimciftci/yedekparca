@@ -18,6 +18,8 @@ public class SellerResponse {
     private String phone;
     private String city;
     private String district;
+    private Long cityId;
+    private Long districtId;
     private String description;
     private SellerStatus status;
     private String rejectionReason;

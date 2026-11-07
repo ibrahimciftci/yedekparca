@@ -52,8 +52,10 @@ public class SecurityConfig {
 
                         // Ürün kataloğu herkese açıktır; katalog görünürlüğü servis sorgusunda kısıtlanır.
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/catalog/products", "/api/catalog/products/**", "/api/catalog/categories", "/api/catalog/brands", "/api/sellers/*/profile").permitAll()
+                        // Keep the directory route public without exposing /api/sellers/me.
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/catalog/products", "/api/catalog/products/**", "/api/catalog/categories", "/api/catalog/brands", "/api/sellers", "/api/sellers/*/profile", "/api/sellers/*/offers").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vehicles/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/locations/**").permitAll()
 
                         // Admin endpoint'lerine sadece ADMIN rolü erişebilir.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

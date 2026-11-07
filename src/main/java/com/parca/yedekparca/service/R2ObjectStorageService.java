@@ -23,7 +23,7 @@ import java.util.UUID;
 @Service
 public class R2ObjectStorageService implements ObjectStorageService {
     private static final Logger log = LoggerFactory.getLogger(R2ObjectStorageService.class);
-    private static final Pattern OFFER_IMAGE_KEY = Pattern.compile("offers/[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:jpg|jpeg|png|webp)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern OFFER_IMAGE_KEY = Pattern.compile("(?:offers|seller-logos)/[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:jpg|jpeg|png|webp)", Pattern.CASE_INSENSITIVE);
 
     @Value("${app.storage.r2.endpoint:}")
     private String endpoint;
@@ -129,6 +129,13 @@ public class R2ObjectStorageService implements ObjectStorageService {
             throw new IllegalArgumentException("Only JPG, JPEG, PNG and WebP images are supported.");
         }
         return "offers/" + UUID.randomUUID() + "." + normalizedExtension;
+    }
+
+    @Override
+    public String newSellerLogoKey(String extension) {
+        String normalizedExtension = extension == null ? "" : extension.toLowerCase(Locale.ROOT);
+        if (!normalizedExtension.matches("jpg|jpeg|png|webp")) throw new IllegalArgumentException("Only JPG, JPEG, PNG and WebP images are supported.");
+        return "seller-logos/" + UUID.randomUUID() + "." + normalizedExtension;
     }
 
     private String createPublicUrl(String key) {

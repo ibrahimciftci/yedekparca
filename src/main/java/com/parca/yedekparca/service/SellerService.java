@@ -18,14 +18,18 @@ public class SellerService {
 
     private final SellerRepository sellerRepository;
     private final UserRepository userRepository;
+    private final LocationService locations;
 
     public SellerService(
             SellerRepository sellerRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            LocationService locations) {
         this.sellerRepository = sellerRepository;
         this.userRepository = userRepository;
+        this.locations = locations;
     }
 
+    @Transactional
     public SellerResponse applyForSeller(
             String email,
             SellerApplicationRequest request) {
@@ -34,17 +38,26 @@ public class SellerService {
                 .orElseThrow(() ->
                         new IllegalArgumentException("Kullanıcı bulunamadı."));
 
+        if (user.getRole() != UserRole.CUSTOMER || !Boolean.TRUE.equals(user.getActive())) {
+            throw new IllegalArgumentException("Yalnızca aktif müşteri hesapları satıcı başvurusu yapabilir.");
+        }
+
         if (sellerRepository.existsByUserId(user.getId())) {
             throw new IllegalArgumentException(
                     "Zaten bir satıcı başvurunuz bulunmaktadır.");
         }
 
+        LocationService.LocationSelection location = locations.resolve(
+                request.getCityId(), request.getDistrictId(), request.getCity(), request.getDistrict());
+
         Seller seller = Seller.builder()
                 .user(user)
                 .storeName(request.getStoreName())
                 .phone(request.getPhone())
-                .city(request.getCity())
-                .district(request.getDistrict())
+                .city(location.city().getName())
+                .district(location.district().getName())
+                .cityId(location.city().getId())
+                .districtId(location.district().getId())
                 .description(request.getDescription())
                 .status(SellerStatus.PENDING)
                 .build();
@@ -135,6 +148,8 @@ public class SellerService {
                 .phone(seller.getPhone())
                 .city(seller.getCity())
                 .district(seller.getDistrict())
+                .cityId(seller.getCityId())
+                .districtId(seller.getDistrictId())
                 .description(seller.getDescription())
                 .status(seller.getStatus())
                 .rejectionReason(seller.getRejectionReason())

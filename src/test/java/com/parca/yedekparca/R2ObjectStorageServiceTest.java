@@ -59,6 +59,9 @@ class R2ObjectStorageServiceTest {
         for (String extension : new String[]{"jpg", "jpeg", "png", "webp"}) {
             String key = "offers/550e8400-e29b-41d4-a716-446655440000." + extension;
             assertEquals("https://images.example.workers.dev/" + key, storage.publicUrl(key, null));
+            String logoKey = storage.newSellerLogoKey(extension);
+            assertTrue(logoKey.matches("seller-logos/[A-Za-z0-9][A-Za-z0-9._-]*\\." + extension));
+            assertEquals("https://images.example.workers.dev/" + logoKey, storage.publicUrl(logoKey, null));
         }
     }
 

@@ -15,5 +15,6 @@ public record SellerProfileUpdateRequest(@NotBlank @Size(max = 150) String store
                                          @DecimalMin("-180.0") @DecimalMax("180.0") BigDecimal longitude,
                                          String workingHours, @Size(max = 1000) String description,
                                          @Pattern(regexp = "|https?://.{1,2040}") String websiteUrl,
-                                         @Pattern(regexp = "|https?://.{1,2040}") String logoUrl) {
+                                         @Pattern(regexp = "|https?://.{1,2040}") String logoUrl,
+                                         Long cityId, Long districtId) {
 }

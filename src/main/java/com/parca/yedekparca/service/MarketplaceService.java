@@ -25,8 +25,9 @@ public class MarketplaceService {
     private final ComplaintRepository complaints;
     private final ProductRepository legacyProducts;
     private final VehicleModelRepository vehicleModels;
+    private final LocationService locations;
 
-    public MarketplaceService(CatalogProductRepository c, ProductOfferRepository o, SellerRepository s, UserRepository u, OfferPhotoRepository p, ObjectStorageService st, UserFavoriteRepository f, ComplaintRepository cr, ProductRepository legacyProducts, VehicleModelRepository vehicleModels) {
+    public MarketplaceService(CatalogProductRepository c, ProductOfferRepository o, SellerRepository s, UserRepository u, OfferPhotoRepository p, ObjectStorageService st, UserFavoriteRepository f, ComplaintRepository cr, ProductRepository legacyProducts, VehicleModelRepository vehicleModels, LocationService locations) {
         catalogs = c;
         offers = o;
         sellers = s;
@@ -37,6 +38,7 @@ public class MarketplaceService {
         complaints = cr;
         this.legacyProducts = legacyProducts;
         this.vehicleModels = vehicleModels;
+        this.locations = locations;
     }
 
     private Seller approvedSeller(String email) {
@@ -57,23 +59,69 @@ public class MarketplaceService {
     @Transactional
     public SellerProfileView updateProfile(String email, SellerProfileUpdateRequest r) {
         Seller s = approvedSeller(email);
+        LocationService.LocationSelection location = locations.resolve(r.cityId(), r.districtId(), r.city(), r.district());
         s.setStoreName(r.storeName().trim());
         s.setPhone(r.phone().trim());
         s.setWhatsappPhone(blank(r.whatsappPhone()));
         s.setContactEmail(blank(r.contactEmail()));
-        s.setCity(r.city().trim());
-        s.setDistrict(r.district().trim());
+        s.setCity(location.city().getName());
+        s.setDistrict(location.district().getName());
+        s.setCityId(location.city().getId());
+        s.setDistrictId(location.district().getId());
         s.setStreetAddress(blank(r.streetAddress()));
-        s.setLatitude(r.latitude());
-        s.setLongitude(r.longitude());
+        if (r.latitude() != null && r.longitude() != null) {
+            s.setLatitude(r.latitude());
+            s.setLongitude(r.longitude());
+        }
         String hours = blank(r.workingHours());
-        if (hours != null && !((hours.startsWith("{") && hours.endsWith("}")) || (hours.startsWith("[") && hours.endsWith("]"))))
-            throw new IllegalArgumentException("Çalışma saatleri geçerli JSON olmalıdır.");
+        WorkingHoursValidator.validate(hours);
         s.setWorkingHours(hours);
         s.setDescription(blank(r.description()));
         s.setWebsiteUrl(blank(r.websiteUrl()));
-        s.setLogoUrl(blank(r.logoUrl()));
         return profile(s);
+    }
+
+    @Transactional
+    public SellerProfileView uploadSellerLogo(String email, MultipartFile file) {
+        Seller seller = approvedSeller(email);
+        if (file == null || file.isEmpty() || file.getSize() > 2 * 1024 * 1024) throw new IllegalArgumentException("Logo 2 MB veya daha küçük olmalıdır.");
+        String filename = Optional.ofNullable(file.getOriginalFilename()).orElse("");
+        String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "";
+        if (!Set.of("jpg", "jpeg", "png", "webp").contains(ext)) throw new IllegalArgumentException("JPG, JPEG, PNG veya WebP dosyası seçin.");
+        byte[] bytes;
+        try { bytes = file.getBytes(); } catch (IOException ex) { throw new IllegalArgumentException("Logo dosyası okunamadı."); }
+        String detected = detectImageType(bytes);
+        if (detected == null || !(detected.equals("image/" + (ext.equals("jpg") ? "jpeg" : ext)))) throw new IllegalArgumentException("Dosya uzantısı ile gerçek görsel biçimi eşleşmiyor.");
+        String key = storage.newSellerLogoKey(ext);
+        String newUrl = storage.put(key, detected, bytes);
+        String oldUrl = seller.getLogoUrl();
+        seller.setLogoUrl(newUrl);
+        if (oldUrl != null) deleteOwnedSellerLogo(oldUrl);
+        return profile(seller);
+    }
+
+    @Transactional
+    public SellerProfileView deleteSellerLogo(String email) {
+        Seller seller = approvedSeller(email);
+        String oldUrl = seller.getLogoUrl();
+        seller.setLogoUrl(null);
+        if (oldUrl != null) deleteOwnedSellerLogo(oldUrl);
+        return profile(seller);
+    }
+
+    private void deleteOwnedSellerLogo(String url) {
+        try {
+            String path = java.net.URI.create(url).getPath();
+            String key = path == null ? "" : path.replaceFirst("^/+", "");
+            if (key.matches("seller-logos/[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:jpg|jpeg|png|webp)")) storage.delete(key);
+        } catch (IllegalArgumentException ignored) { /* Keep legacy external URLs; delete only validated owned R2 keys. */ }
+    }
+
+    private String detectImageType(byte[] b) {
+        if (b.length >= 3 && (b[0]&255)==0xff && (b[1]&255)==0xd8 && (b[2]&255)==0xff) return "image/jpeg";
+        if (b.length >= 8 && (b[0]&255)==0x89 && b[1]=='P' && b[2]=='N' && b[3]=='G') return "image/png";
+        if (b.length >= 12 && b[0]=='R' && b[1]=='I' && b[2]=='F' && b[3]=='F' && b[8]=='W' && b[9]=='E' && b[10]=='B' && b[11]=='P') return "image/webp";
+        return null;
     }
 
     @Transactional(readOnly = true)
@@ -85,6 +133,28 @@ public class MarketplaceService {
     public SellerProfileView publicProfile(Long id) {
         Seller s = sellers.findById(id).filter(x -> x.getStatus() == SellerStatus.APPROVED && Boolean.TRUE.equals(x.getProfileActive()) && Boolean.TRUE.equals(x.getUser().getActive())).orElseThrow(() -> new IllegalArgumentException("Firma profili bulunamadı."));
         return profile(s);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PublicSellerView> publicSellers(String name, String city, String district, int page, int size) {
+        return publicSellers(name, city, district, null, null, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PublicSellerView> publicSellers(String name, String city, String district, Long cityId, Long districtId, int page, int size) {
+        locations.validateFilter(cityId, districtId);
+        String n = blank(name), c = blank(city), d = blank(district);
+        return sellers.findPublicSellers(n, c, d, cityId, districtId, PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.ASC, "storeName")))
+                .map(s -> new PublicSellerView(s.getId(), s.getStoreName(), s.getCity(), s.getDistrict(), s.getCityId(), s.getDistrictId(), s.getDescription(), s.getLogoUrl(),
+                        offers.countBySellerIdAndModerationStatusAndActiveTrueAndCatalogProductModerationStatusAndCatalogProductActiveTrue(
+                                s.getId(), ProductModerationStatus.APPROVED, CatalogModerationStatus.APPROVED, true)));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OfferView> publicSellerOffers(Long sellerId, int page, int size) {
+        publicProfile(sellerId);
+        return offers.findAll(MarketplaceSpecifications.offers(null, null, sellerId, null, null, true),
+                PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt"))).map(this::view);
     }
 
     @Transactional(readOnly = true)
@@ -100,7 +170,7 @@ public class MarketplaceService {
     }
 
     private SellerProfileView profile(Seller s) {
-        return new SellerProfileView(s.getId(), s.getStoreName(), s.getPhone(), s.getWhatsappPhone(), s.getContactEmail(), s.getCity(), s.getDistrict(), s.getStreetAddress(), s.getLatitude(), s.getLongitude(), s.getWorkingHours(), s.getDescription(), s.getWebsiteUrl(), s.getLogoUrl(), s.getProfileActive());
+        return new SellerProfileView(s.getId(), s.getStoreName(), s.getPhone(), s.getWhatsappPhone(), s.getContactEmail(), s.getCity(), s.getDistrict(), s.getCityId(), s.getDistrictId(), s.getStreetAddress(), s.getLatitude(), s.getLongitude(), s.getWorkingHours(), s.getDescription(), s.getWebsiteUrl(), s.getLogoUrl(), s.getProfileActive());
     }
 
     @Transactional

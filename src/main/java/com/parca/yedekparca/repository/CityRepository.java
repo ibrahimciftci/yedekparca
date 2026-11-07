@@ -1,0 +1,6 @@
+package com.parca.yedekparca.repository;
+
+import com.parca.yedekparca.entity.City;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface CityRepository extends JpaRepository<City, Long> { }

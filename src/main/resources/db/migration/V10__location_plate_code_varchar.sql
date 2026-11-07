@@ -1,0 +1,1 @@
+ALTER TABLE cities ALTER COLUMN plate_code TYPE VARCHAR(2);
