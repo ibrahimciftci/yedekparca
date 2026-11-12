@@ -496,7 +496,7 @@ public class MarketplaceService {
         photos.delete(p);
         o.getPhotos().remove(p);
         if (primary && !o.getPhotos().isEmpty()) o.getPhotos().get(0).setPrimaryPhoto(true);
-        storage.delete(key);
+        if (!key.startsWith("demo-local/")) storage.delete(key);
     }
 
     private String detect(byte[] b) {
@@ -586,7 +586,7 @@ public class MarketplaceService {
     private OfferView view(ProductOffer o) {
         CatalogProduct c = o.getCatalogProduct();
         Seller s = o.getSeller();
-        return new OfferView(o.getId(), c.getId(), c.getName(), c.getDescription(), o.getOfferDescription(), c.getCategory(), c.getBrand(), c.getOemNumber(), o.getPrice(), o.getStockQuantity(), o.getCondition(), o.getModerationStatus(), o.getRejectionReason(), o.getActive(), o.getPriceUpdatedAt(), o.getStockUpdatedAt(), o.getLegacyProductId() == null ? null : legacyImage(o.getLegacyProductId()), o.getPhotos().stream().map(x -> new OfferPhotoView(x.getId(), storage.publicUrl(x.getObjectKey(), x.getPublicUrl()), x.getDisplayOrder(), x.getPrimaryPhoto())).toList(), c.getVehicleCompatibilities().stream().map(this::compatibilityResponse).toList(), s.getId(), s.getStoreName(), s.getPhone(), s.getWhatsappPhone(), s.getCity(), s.getDistrict(), s.getLogoUrl(), s.getLatitude(), s.getLongitude(), s.getStreetAddress(), o.getCreatedAt());
+        return new OfferView(o.getId(), c.getId(), c.getName(), c.getDescription(), o.getOfferDescription(), c.getCategory(), c.getBrand(), c.getOemNumber(), o.getPrice(), o.getStockQuantity(), o.getCondition(), o.getModerationStatus(), o.getRejectionReason(), o.getActive(), o.getPriceUpdatedAt(), o.getStockUpdatedAt(), o.getLegacyProductId() == null ? null : legacyImage(o.getLegacyProductId()), o.getPhotos().stream().map(x -> new OfferPhotoView(x.getId(), x.getObjectKey().startsWith("demo-local/") ? x.getPublicUrl() : storage.publicUrl(x.getObjectKey(), x.getPublicUrl()), x.getDisplayOrder(), x.getPrimaryPhoto())).toList(), c.getVehicleCompatibilities().stream().map(this::compatibilityResponse).toList(), s.getId(), s.getStoreName(), s.getPhone(), s.getWhatsappPhone(), s.getCity(), s.getDistrict(), s.getLogoUrl(), s.getLatitude(), s.getLongitude(), s.getStreetAddress(), o.getCreatedAt());
     }
 
     private String legacyImage(Long id) {

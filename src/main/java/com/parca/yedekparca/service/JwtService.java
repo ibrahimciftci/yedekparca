@@ -52,7 +52,7 @@ public class JwtService {
         try {
             Claims claims = extractAllClaims(token);
 
-            return claims.getSubject().equals(email)
+            return claims.getSubject() != null && claims.getSubject().equals(email)
                     && claims.getExpiration().after(new Date());
 
         } catch (Exception ex) {

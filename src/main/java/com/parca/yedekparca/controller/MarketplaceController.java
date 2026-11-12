@@ -23,7 +23,7 @@ public class MarketplaceController {
         this.service = service;
     }
 
-    @GetMapping("/api/catalog/products")
+    @GetMapping({"/api/catalog/products", "/api/marketplace/catalog"})
     public ApiResponse<Page<CatalogView>> catalog(@RequestParam(required = false) String search,
             @RequestParam(required = false) String category, @RequestParam(required = false) String brand,
             @RequestParam(required = false) String oemNumber,

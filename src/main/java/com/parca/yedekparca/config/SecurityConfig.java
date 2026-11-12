@@ -4,6 +4,7 @@ import com.parca.yedekparca.security.JwtAuthenticationFilter;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -20,9 +21,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final Environment environment;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, Environment environment) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.environment = environment;
     }
 
     @Bean
@@ -44,6 +47,7 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(request -> isDemoImageGet(request)).permitAll()
                         // Kayıt ve giriş herkese açık.
                         .requestMatchers(
                                 "/api/auth/register",
@@ -53,7 +57,10 @@ public class SecurityConfig {
                         // Ürün kataloğu herkese açıktır; katalog görünürlüğü servis sorgusunda kısıtlanır.
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
                         // Keep the directory route public without exposing /api/sellers/me.
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/catalog/products", "/api/catalog/products/**", "/api/catalog/categories", "/api/catalog/brands", "/api/sellers", "/api/sellers/*/profile", "/api/sellers/*/offers").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/catalog/products", "/api/catalog/products/**", "/api/marketplace/catalog",
+                                "/api/catalog/categories", "/api/catalog/brands",
+                                "/api/sellers", "/api/sellers/*/profile", "/api/sellers/*/offers").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vehicles/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/locations/**").permitAll()
 
@@ -75,6 +82,15 @@ public class SecurityConfig {
                 );
 
         return http.build();
+    }
+
+    private boolean isDemoImageGet(jakarta.servlet.http.HttpServletRequest request) {
+        boolean demoProfile = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev-demo"))
+                && !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"))
+                && !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("production"));
+        if (!demoProfile || !org.springframework.http.HttpMethod.GET.matches(request.getMethod())) return false;
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return com.parca.yedekparca.controller.DemoImageController.isAllowedPublicGetPath(path);
     }
 
     @Bean
