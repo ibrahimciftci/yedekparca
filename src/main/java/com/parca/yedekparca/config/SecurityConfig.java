@@ -16,6 +16,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
+import java.util.Arrays;
 
 @Configuration
 public class SecurityConfig {
@@ -98,9 +99,15 @@ public class SecurityConfig {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(
-                List.of("http://localhost:5173")
-        );
+        List<String> allowedOrigins = Arrays.stream(environment.getProperty(
+                        "app.cors.allowed-origins", "http://localhost:5173").split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        if (allowedOrigins.isEmpty() || allowedOrigins.contains("*")) {
+            throw new IllegalStateException("app.cors.allowed-origins must contain explicit origins and cannot use '*'.");
+        }
+        configuration.setAllowedOrigins(allowedOrigins);
 
         configuration.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
